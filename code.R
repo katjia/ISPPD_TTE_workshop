@@ -195,8 +195,8 @@ df_1_dose <- bootm %>%
       cases_2_doses <- data.frame(dur_followup=seq(1, followup_period, 1)) %>% 
         left_join(., cases_2_doses, by = "dur_followup")
       
-      # At each time t: Cumulative Incidence(t) = Cumulative sum of weights / Total population size 
-      # This accounts for censoring by upweighting cases who were at risk of being censored
+      # At each time t: Cumulative Incidence(t) = Cumulative sum of weighted cases / Total population size
+      # This accounts for censoring by upweighting cases who were uncensored
       # This gives us our cumulative incidence curve
       cases_2_doses$risk <- cumsum(tidyr::replace_na(cases_2_doses$wt, 0)) / nrow(df_2_doses)
       
@@ -251,8 +251,6 @@ df_1_dose <- bootm %>%
       cases_1_dose <- data.frame(dur_followup=seq(1, followup_period, 1)) %>% 
         left_join(., cases_1_dose, by = "dur_followup")
       
-      # At each time t: Cumulative Incidence(t) = Cumulative sum of weights / Total population size 
-      # This accounts for censoring by upweighting cases who were at risk of being censored
       # This gives us our cumulative incidence curve
       cases_1_dose$risk <- cumsum(tidyr::replace_na(cases_1_dose$wt, 0)) / nrow(df_1_dose)
       
@@ -301,15 +299,6 @@ selected_sims <- sample(available_sims, 3)
 all_cases_selected <- all_cases_clean %>%
   filter(sim %in% selected_sims)
 
-# Calculate 1st and 99th percentiles per protocol and sim for the vertical lines
-percentile_data <- all_cases_selected %>%
-  group_by(protocol, sim) %>%
-  summarise(
-    p01 = quantile(wt, 0.01, na.rm = TRUE),
-    p99 = quantile(wt, 0.99, na.rm = TRUE),
-    .groups = "drop"
-  )
-
 # Visualize the distribution of the inverse probability weights
 # 2x3 grid: upper row for 1 dose, lower row for 2 doses, columns for each sim
 ggplot(all_cases_selected, aes(x = wt)) +
@@ -321,12 +310,7 @@ ggplot(all_cases_selected, aes(x = wt)) +
   ) +
   theme_bw(base_size = 14) +
   facet_grid(protocol ~ sim, labeller = labeller(sim = function(x) paste0("sim=", x))) +
-  geom_vline(data = percentile_data, aes(xintercept = p01), color = "blue", linetype = "dashed") +
-  geom_vline(data = percentile_data, aes(xintercept = p99), color = "red", linetype = "dashed") +
-  geom_text(data = percentile_data, aes(x = p01, label = "1%"), 
-            y = Inf, vjust = 1.4, hjust = 1, color = "blue", size = 3) +
-  geom_text(data = percentile_data, aes(x = p99, label = "99%"), 
-            y = Inf, vjust = 1.4, hjust = -0.1, color = "red", size = 3) +
+  scale_x_continuous(breaks = c(1, 2)) +
   coord_cartesian(clip = "off") +
   theme(plot.margin = margin(5.5, 20, 5.5, 5.5),
         panel.spacing.x = unit(1.5, "lines"))
@@ -411,6 +395,6 @@ ggplot(
     x = "Days since dose 1",
     y = "Risk ratio (1 dose vs 2 doses)"
   ) +
-  scale_y_continuous(limits = c(NA, 10)) +
+  scale_y_continuous(limits = c(NA, 3)) +
   theme(axis.title = element_text(size = 16),
         axis.text = element_text(size = 14))
