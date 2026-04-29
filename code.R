@@ -292,56 +292,44 @@ all_cases <- rbind(all_cases_2_doses,
 all_cases_clean <- all_cases %>% 
   filter(!is.na(wt))
 
-# Calculate 1st and 99th percentiles per protocol for the vertical lines
-percentile_data <- all_cases_clean %>%
-  group_by(protocol) %>%
+# Randomly select 3 simulations
+set.seed(123)
+available_sims <- unique(all_cases_clean$sim)
+selected_sims <- sample(available_sims, 3)
+
+# Filter to only the selected simulations
+all_cases_selected <- all_cases_clean %>%
+  filter(sim %in% selected_sims)
+
+# Calculate 1st and 99th percentiles per protocol and sim for the vertical lines
+percentile_data <- all_cases_selected %>%
+  group_by(protocol, sim) %>%
   summarise(
     p01 = quantile(wt, 0.01, na.rm = TRUE),
-    p99 = quantile(wt, 0.99, na.rm = TRUE)
+    p99 = quantile(wt, 0.99, na.rm = TRUE),
+    .groups = "drop"
   )
 
 # Visualize the distribution of the inverse probability weights
-wt_2_doses <- all_cases_clean %>% filter(sim==1,
-                                         protocol=="2 doses") %>% 
-ggplot(aes(x = wt)) +
-  geom_histogram(aes(y = after_stat(count / sum(count))), fill = "steelblue", color = "white", binwidth = 0.1) +
+# 2x3 grid: upper row for 1 dose, lower row for 2 doses, columns for each sim
+ggplot(all_cases_selected, aes(x = wt)) +
+  geom_histogram(fill = "steelblue", color = "white", binwidth = 0.1) +
   labs(
-    title = "2 doses",
-    x = "Weight",
-    y = "Relative Frequency"
+    title = "Distribution of Weights across Selected Simulations",
+    x = "Weight (1/Probability of remaining uncensored)",
+    y = "Frequency"
   ) +
-  theme_minimal(base_size = 14) +
+  theme_bw(base_size = 14) +
+  facet_grid(protocol ~ sim, labeller = labeller(sim = function(x) paste0("sim=", x))) +
   geom_vline(data = percentile_data, aes(xintercept = p01), color = "blue", linetype = "dashed") +
   geom_vline(data = percentile_data, aes(xintercept = p99), color = "red", linetype = "dashed") +
-  geom_text(data = percentile_data, aes(x = p01, label = "1st Percentile"), 
-            y = Inf, vjust = 1.4, hjust = 1, color = "blue", size = 3.5) +
-  geom_text(data = percentile_data, aes(x = p99, label = "99th Percentile"), 
-            y = Inf, vjust = 1.4, hjust = 1, color = "red", size = 3.5) +
+  geom_text(data = percentile_data, aes(x = p01, label = "1%"), 
+            y = Inf, vjust = 1.4, hjust = 1, color = "blue", size = 3) +
+  geom_text(data = percentile_data, aes(x = p99, label = "99%"), 
+            y = Inf, vjust = 1.4, hjust = -0.1, color = "red", size = 3) +
   coord_cartesian(clip = "off") +
-  theme(plot.margin = margin(5.5, 20, 5.5, 5.5))+
-  lims(x=c(0.5,NA))
-
-wt_1_dose <- all_cases_clean %>% filter(sim==1,
-                                        protocol=="1 dose") %>% 
-  ggplot(aes(x = wt)) +
-  geom_histogram(aes(y = after_stat(count / sum(count))), fill = "steelblue", color = "white", binwidth = 0.1) +
-  labs(
-    title = "1 dose",
-    x = "Weight",
-    y = "Relative Frequency"
-  ) +
-  theme_minimal(base_size = 14) +
-  geom_vline(data = percentile_data, aes(xintercept = p01), color = "blue", linetype = "dashed") +
-  geom_vline(data = percentile_data, aes(xintercept = p99), color = "red", linetype = "dashed") +
-  geom_text(data = percentile_data, aes(x = p01, label = "1st Percentile"), 
-            y = Inf, vjust = 1.4, hjust = 1, color = "blue", size = 3.5) +
-  geom_text(data = percentile_data, aes(x = p99, label = "99th Percentile"), 
-            y = Inf, vjust = 1.4, hjust = 1, color = "red", size = 3.5) +
-  coord_cartesian(clip = "off") +
-  theme(plot.margin = margin(5.5, 20, 5.5, 5.5)) +
-  lims(x=c(0.4,NA))
-
-wt_2_doses/wt_1_dose
+  theme(plot.margin = margin(5.5, 20, 5.5, 5.5),
+        panel.spacing.x = unit(1.5, "lines"))
 
 # 5. Plot cumulative incidence -------------------------------------------------
 all_data <- rbind(all_res_2_doses,
