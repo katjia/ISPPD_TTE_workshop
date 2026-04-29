@@ -7,7 +7,7 @@
 
 To run the analysis, you have two options:
 * Option 1: Use Google Colab
-   * Open the notebook here: https://drive.google.com/file/d/1PeeSWEk--CNX-FsV_NlB2YAv1s-aB20T/view?usp=sharing 
+   * Open the notebook here: [https://drive.google.com/file/d/1PeeSWEk--CNX-FsV_NlB2YAv1s-aB20T/view?usp=sharing](https://colab.research.google.com/drive/1PeeSWEk--CNX-FsV_NlB2YAv1s-aB20T?usp=sharing#scrollTo=lYeALk7_-rp2)
    <br> ⚠️ Important: This link opens a temporary copy of the notebook. If you make any changes, be sure to save a copy to your own Google Drive.
 
 * Option 2: Run locally
