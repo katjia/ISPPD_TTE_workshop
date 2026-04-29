@@ -31,15 +31,249 @@ install_missing_pkgs(pkgs)
 load_pkgs(pkgs)
 
 # 2.1 Cloning & censoring ------------------------------------------------------
-# We specify 100 bootstrap samples to get the confidence interval
+# We follow up each individual until 240 days after dose 1
+followup_period <- 240
+
+# We specify 100 bootstrap samples to construct 95% confidence intervals
 n_boot <- 100 # 1000
+
+# Create  
+all_cases_2_doses <- list()
+all_cases_1_dose <- list()
+
+all_res_2_doses <- list()
+all_res_1_dose <- list()
+
+# Set a seed for reproducibility
+for(i in 1:n_boot){
+seed <- 788 + i
+
+set.seed(seed) 
+
+bootm <- my_data[sample(1:dim(my_data)[1], replace=TRUE), ] 
+
+#####----------Cloning for the 2-dose schedule----------#####
+# Step 1: Create a new data frame for clones under the 2-dose schedule
+df_2_doses <- bootm %>% 
+  
+  ### Step 1 for the 2-dose schedule ###
+  # Calculate censoring time for each clone
+  dplyr::mutate(censoring_time = case_when(
+    
+    #---Criteria 1---#
+    # If never received dose 2: follow until Day 28
+    is.na(days.btw.doses.12) ~ 28,
+    
+    #---Criteria 2---#                                                                
+    # If received dose 2: follow until end of follow-up
+    !is.na(days.btw.doses.12) ~ followup_period))
+
+    ### Create a function for Steps 2-4 ###
+    compute_metrics <- function(df) {
+      
+    # Step 2: Determine the infection outcome for the clone of each individual under the specified dosing schedule.
+      df <- df %>%
+        dplyr::mutate(outcome_before_censoring = case_when(
+          # Outcome_before_censoring is 1 if the outcome occurred before 
+          # an individual was censored
+          time.inf < censoring_time ~ 1,
+          
+          # Otherwise, the individual did not have an outcome, or the individual
+          # have an outcome after censoring_time 
+          # For either case, outcome_before_censoring = 0.
+          is.na(df$time.inf) | df$time.inf >= df$censoring_time ~ 0
+        ))
+      
+   # Step 3 ###
+      # Determine the duration of follow up, "dur_followup", for the clone of each 
+      # individual under the specific dosing schedule. 
+      
+      # "dur_followup" should be "censoring_time" if:
+      # the outcome occurred after censoring due to non-adherence to the specified dosing schedule
+      df$dur_followup <- df$censoring_time
+      
+      # "dur_followup" should be "time.inf" if:
+      # the outcome occurred before censoring 
+      df$dur_followup[!is.na(df$outcome_before_censoring) & df$outcome_before_censoring == 1L] <-
+        df$time.inf[!is.na(df$outcome_before_censoring) & df$outcome_before_censoring == 1L]
+      
+      ### Step 4 ###
+      # Create an indicator variable, "censored", which is 1 if censored due to 
+      # the protocol non-adherence or the end of follow up; 
+      # 0 otherwise.
+      df$censored <- as.integer(df$outcome_before_censoring == 0L)
+      
+      df
+    }
+    
+    df_2_doses <- compute_metrics(df_2_doses)
+
+    # Label protocol group
+    df_2_doses$protocol <- "2 doses"
+
+#####----------Cloning for the 1-dose schedule----------#####
+df_1_dose <- bootm %>% 
+      
+    ### Step 1 for the 1-dose schedule ###
+    # Calculate censoring time for each clone
+      dplyr::mutate(censoring_time = case_when(
+        
+        #---Criteria 1---#
+        # If never received dose 2: follow until end of follow-up 
+        is.na(days.btw.doses.12) ~ followup_period,
+        
+        #---Criteria 2---#                                                                
+        # If received dose 2: until Day 28 (day of receiving dose 2)
+        !is.na(days.btw.doses.12) ~ 28))
+    
+    ### Steps 2-4 ###
+    df_1_dose <- compute_metrics(df_1_dose)
+    
+    # Label protocol group
+    df_1_dose$protocol <- "1 dose"
+
+#####----------Create an analytic dataset for clones----------#####
+    
+    # Define the outcome at dur_followup under each protocol.
+    # 1 if a clone had an outcome and their outcome was observed under each protocol.
+    # 0 otherwise.
+    df_2_doses$clone.outcome <- as.integer(df_2_doses$outcome_before_censoring == 1)
+    df_1_dose$clone.outcome <- as.integer(df_1_dose$outcome_before_censoring == 1)
+    
+# 2.1 Compute the inverse probability of censoring weight (IPCW) for each clone under each protocol --------------
+    
+    #####----------2-dose schedule----------#####
+    # Fit a Cox proportional hazards (PH) model for censoring
+    # (the model outcome is being censored.)
+
+      coxph.censor <- survival::coxph(survival::Surv(dur_followup, censored) ~ 1, data = df_2_doses)
+      
+      # Subset the clone population to just those who had the outcome
+      # because those who did not have the outcome do not contribute to the calculation
+      # of the cumulative risk of infection.
+      cases <- df_2_doses[df_2_doses$clone.outcome==1,] 
+      
+      # Predict the probability of remaining uncensored at each person’s event time
+      # (date of the selected outcome), using the survival package with broom.
+      # For a null Cox model, use baseline hazard
+      bh <- survival::basehaz(coxph.censor, centered = FALSE)
+      expected_vals <- approx(bh$time, bh$hazard, xout = cases$dur_followup, rule = 2)$y
+      cases_2_doses <- cases %>%
+        dplyr::mutate(.fitted = expected_vals,
+                      prob = exp(-.fitted))
+      
+      # Order the subset data by the event time 
+      # (i.e., number of days between the index date and the date of outcome)
+      cases_2_doses <- cases_2_doses[order(cases_2_doses$dur_followup),]
+      
+      # Compute the cumulative sum of 1/predictions at each of the times, which is
+      # our cumulative incidence curve
+      cases_2_doses$wt <- 1/cases_2_doses$prob
+      
+      # Create time data 
+      cases_2_doses <- cases_2_doses %>% 
+        subset(., select = c(ID, wt, dur_followup, protocol))
+      
+      # Return the patient-level weights
+      all_cases_2_doses <- cbind(cases_2_doses, 
+                                 sim=sim_id)
+      
+      cases_2_doses <- data.frame(dur_followup=seq(1, followup_period, 1)) %>% 
+        left_join(., cases_2_doses, by = "dur_followup")
+      
+      # Compute the weighted risk of the outcome for each clone that had the outcome
+      cases_2_doses$risk <- cumsum(tidyr::replace_na(cases_2_doses$wt, 0)) / nrow(df_2_doses)
+      
+      res_2_doses <- cases_2_doses[which(cases_2_doses$dur_followup <= followup_period),] %>%
+        dplyr::group_by(dur_followup) %>%
+        dplyr::summarise(cumrisk = max(risk, na.rm=TRUE))
+      
+      # Add back in protocol column
+      res_2_doses$protocol <- "2 doses"
+      
+      # Note iteration 
+      res_2_doses$sim <- i
+      
+      # Extract the maximum risk (i.e., cumulative weighted risk of the outcome) on each event day
+      all_res_2_doses <- rbind(all_res_2_doses, res_2_doses)
+
+  #####----------1-dose schedule----------#####
+  
+  # Fit a Cox proportional hazards (PH) model for censoring
+  # (the model outcome is being censored.)
+      coxph.censor <- survival::coxph(survival::Surv(dur_followup, censored) ~ 1, data = df_1_dose)
+      
+      # Subset the clone population to just those who had the outcome
+      # because those who did not have the outcome do not contribute to the calculation
+      # of the cumulative risk of infection.
+      cases <- df_1_dose[df_1_dose$clone.outcome==1,] 
+      
+      # Predict the probability of remaining uncensored at each person’s event time
+      # (date of the selected outcome), using the survival package with broom.
+      # For a null Cox model, use baseline hazard
+      bh <- survival::basehaz(coxph.censor, centered = FALSE)
+      expected_vals <- approx(bh$time, bh$hazard, xout = cases$dur_followup, rule = 2)$y
+      cases_1_dose <- cases %>%
+        dplyr::mutate(.fitted = expected_vals,
+                      prob = exp(-.fitted))
+      
+      # Order the subset data by the event time 
+      # (i.e., number of days between the index date and the date of outcome)
+      cases_1_dose <- cases_1_dose[order(cases_1_dose$dur_followup),]
+      
+      # Compute the cumulative sum of 1/predictions at each of the times, which is
+      # our cumulative incidence curve
+      cases_1_dose$wt <- 1/cases_1_dose$prob
+      
+      # Create time data 
+      cases_1_dose <- cases_1_dose %>% 
+        subset(., select = c(ID, wt, dur_followup, protocol))
+      
+      # Return the patient-level weights
+      all_cases_1_dose <- cbind(cases_1_dose, 
+                                 sim=sim_id)
+      
+      cases_1_dose <- data.frame(dur_followup=seq(1, followup_period, 1)) %>% 
+        left_join(., cases_1_dose, by = "dur_followup")
+      
+      # Compute the weighted risk of the outcome for each clone that had the outcome
+      cases_1_dose$risk <- cumsum(tidyr::replace_na(cases_1_dose$wt, 0)) / nrow(df_1_dose)
+      
+      res_1_dose <- cases_1_dose[which(cases_1_dose$dur_followup <= followup_period),] %>%
+        dplyr::group_by(dur_followup) %>%
+        dplyr::summarise(cumrisk = max(risk, na.rm=TRUE))
+      
+      # Add back in protocol column
+      res_1_dose$protocol <- "1 dose"
+      
+      # Note iteration 
+      res_1_dose$sim <- i
+      
+      # Extract the maximum risk (i.e., cumulative weighted risk of the outcome) on each event day
+      all_res_1_dose <- rbind(all_res_1_dose, res_1_dose)
+
+    # clean up
+    rm(df_2_doses)
+    rm(df_1_dose)
+    
+    rm(res_2_doses)
+    rm(res_1_dose)
+    
+    rm(cases_2_doses)
+    rm(cases_1_dose)
+}
+
+
+
 boot_workers <- max(1, parallel::detectCores() - 1)
+
 # Set a seed for reproducibility
 boot_seed <- 788
 end.eval <- 240
 
 # main function
 func.create.clone <- function(df, range_min, range_max) {
+  
   df %>%
     mutate(
       clone_follow_end = case_when(
