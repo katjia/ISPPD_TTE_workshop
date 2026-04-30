@@ -11,5 +11,5 @@ To run the analysis, you have two options:
    <br> ⚠️ Important: This link opens a temporary copy of the notebook. If you make any changes, be sure to save a copy to your own Google Drive.
 
 * Option 2: Run locally
-  * Download the files `code.R` and `dat.csv` from the GitHub page
+  * Download `code.R` from the GitHub page
   * Run the script in your local R environment
