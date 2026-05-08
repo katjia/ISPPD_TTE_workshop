@@ -1,6 +1,6 @@
 # 1.1 Load data -----------------------------------------------------------------
 my_data <- read.csv("https://github.com/katjia/ISPPD_TTE_workshop/raw/main/dat.csv")
-head(my_data)
+head(my_data, 20)
 
 # 1.2 Package setup ------------------------------------------------------------
 install_missing_pkgs <- function(pkgs) {
@@ -31,12 +31,15 @@ install_missing_pkgs(pkgs)
 load_pkgs(pkgs)
 
 # 2 Cloning & censoring --------------------------------------------------------
-# We create "clones" of each individual under two protocols:
+# 2.1 Cloning
+# 👉 At the index date (i.e., day of receiving Dose 1), 
+# we assign each person to all protocols that are compatible with their observed data.
+# 👥 We create two "clones" of each person under two protocols:
 # 1. 2-dose protocol: received two doses
 # 2. 1-dose protocol: received only dose
-# 
-# Cloning: Each individual is assigned to both protocols at the time they receive dose 1 (index date). 
-# Censoring: Individuals are censored when they deviate from the assigned protocol. 
+
+# 2.2 Censoring 
+# Individuals are **censored** when they deviate from the assigned protocol.
 
 # BOOTSTRAPPING to construct confidence intervals
 # Bootstrap resampling: Randomly sample participants WITH REPLACEMENT n_boot times
@@ -62,11 +65,11 @@ seed <- 788 + i
 
 set.seed(seed) 
 
-bootm <- my_data[sample(1:dim(my_data)[1], replace=TRUE), ] 
+target_pop <- my_data[sample(1:dim(my_data)[1], replace=TRUE), ] 
 
 # 2.1 Cloning for the 2-dose schedule---------------------------------
 
-df_2_doses <- bootm %>% 
+df_2_doses <- target_pop %>% 
   
   ### Step 1 for the 2-dose schedule ###
   # Calculate censoring time for each clone
@@ -123,7 +126,7 @@ df_2_doses <- bootm %>%
     df_2_doses$protocol <- "2 doses"
 
 # 2.2 Cloning for the 1-dose schedule----------------------------
-df_1_dose <- bootm %>% 
+df_1_dose <- target_pop %>% 
       
       ### Step 1 for the 1-dose schedule ###
       # Calculate censoring time for each clone
@@ -146,31 +149,24 @@ df_1_dose <- bootm %>%
     # Label protocol group
     df_1_dose$protocol <- "1 dose"
 
-    # Define the outcome at dur_followup under each protocol:
-    # clone.outcome=1 if a clone had an outcome before censoring under each protocol
-    # clone.outcome=0 otherwise.
-    df_2_doses$clone.outcome <- as.integer(df_2_doses$outcome_before_censoring == 1)
-    df_1_dose$clone.outcome <- as.integer(df_1_dose$outcome_before_censoring == 1)
-    
 # 3 Compute the inverse probability of censoring weight (IPCW) for each clone under each protocol --------------
-
-    # We use the Cox proportional hazard model to estimate the probability of remaining recensored over time
+  # 3.1 Censoring weights for 2-dose protocol ----------------------------------
+    
+    # STEP 1: We use the Cox proportional hazard model to estimate the probability of remaining uncensored over time
     # We fit a Cox proportional hazards model where the "event" is CENSORING (not outcome)
     # Model: Surv(dur_followup, censored) ~ 1
     #   - dur_followup: time until censoring (non-adherence or EOFU) or outcome
     #   - censored: 1 if censored, 0 if had outcome
     #   - ~ 1: null model (no covariates), estimates baseline censoring hazard only
-
-  # 3.1 Censoring weights for 2-dose protocol ----------------------------------
     
       coxph.censor <- survival::coxph(survival::Surv(dur_followup, censored) ~ 1, data = df_2_doses)
       
       # Subset the clone population to just those who had the outcome
-      # because those who did not have the outcome do not contribute to the calculation
+      # because those who did not have the outcome do not contribute to the numerator
       # of the cumulative risk of outcome.
-      cases <- df_2_doses[df_2_doses$clone.outcome==1,] 
+      cases <- df_2_doses[df_2_doses$outcome_before_censoring==1,]
       
-      # Predict the probability of remaining uncensored at each person’s event time
+      # STEP 2: Predict the probability of remaining uncensored at each person’s event time
       # (date of the outcome).
       # For a null Cox model, use baseline hazard
       bh <- survival::basehaz(coxph.censor, centered = FALSE)
@@ -182,7 +178,7 @@ df_1_dose <- bootm %>%
       # Order the subset data by the event time 
       cases_2_doses <- cases_2_doses[order(cases_2_doses$dur_followup),]
       
-      # Compute the inverse probability censoring weights
+      # STEP 3: Compute the inverse probability censoring weights
       cases_2_doses$wt <- 1/cases_2_doses$prob
       
       # Create time data 
@@ -217,14 +213,14 @@ df_1_dose <- bootm %>%
       # Save the patient-level weights
       all_cases_2_doses <- rbind(all_cases_2_doses, cases_2_doses)
 
-      # 3.2 Censoring weights for 1-dose protocol ------------------------------
+  # 3.2 Censoring weights for 1-dose protocol ------------------------------
       
       coxph.censor <- survival::coxph(survival::Surv(dur_followup, censored) ~ 1, data = df_1_dose)
       
       # Subset the clone population to just those who had the outcome
-      # because those who did not have the outcome do not contribute to the calculation
+      # because those who did not have the outcome do not contribute to the numerator
       # of the cumulative risk of outcome.
-      cases <- df_1_dose[df_1_dose$clone.outcome==1,] 
+      cases <- df_1_dose[df_1_dose$outcome_before_censoring==1,]
       
       # Predict the probability of remaining uncensored at each person’s event time
       # (date of the outcome).
@@ -282,7 +278,7 @@ df_1_dose <- bootm %>%
     rm(cases_1_dose)
 }
 
-# 4. Visualize the distribution of weights -------------------------------------
+# 4. Visualize the weights -------------------------------------
 all_cases <- rbind(all_cases_2_doses, 
                    all_cases_1_dose)
 
