@@ -2,7 +2,9 @@
 ## Welcome to the Target Trial Emulation Workshop!
 <img src="https://drive.google.com/uc?export=view&id=1HgtK1egiUQ6Po0HTxwTXvg6g6_cE81UN" alt="drawing" width="400"/>
 
-## May 17, 2026  <br> Kayoko Shioda, PhD, DVM, MPH, Katherine Jia, PhD, MS, Kanako Fuyama, MPH
+## May 17, 2026  
+
+©️ Kayoko Shioda, PhD, DVM, MPH, Katherine Jia, PhD, MS, Kanako Fuyama, MPH
 
 ⏱️ Estimated Expected completion time: 50 minutes
 
