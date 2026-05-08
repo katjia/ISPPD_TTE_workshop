@@ -1,10 +1,8 @@
 # ISPPD TTE workshop
 ## Welcome to the Target Trial Emulation Workshop!
-
 <img src="https://drive.google.com/uc?export=view&id=1HgtK1egiUQ6Po0HTxwTXvg6g6_cE81UN" alt="drawing" width="400"/>
 
-## May 17, 2026  
-## Kayoko Shioda, Katherine Jia, Kanako Fuyama
+## May 17, 2026  <br> Kayoko Shioda, Katherine Jia, Kanako Fuyama
 
 ⏱️ Estimated Expected completion time: 50 minutes
 
