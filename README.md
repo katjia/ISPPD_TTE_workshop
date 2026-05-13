@@ -9,9 +9,11 @@
 ⏱️ Estimated Expected completion time: 50 minutes
 
 To run the analysis, you have two options:
-* Option 1: Use Google Colab
+* **Option 1: Use Google Colab (Recommended)**
    * Open the notebook here: [https://colab.research.google.com/drive/1PeeSWEk--CNX-FsV_NlB2YAv1s-aB20T?usp=sharing#scrollTo=lYeALk7_-rp2](https://colab.research.google.com/drive/1PeeSWEk--CNX-FsV_NlB2YAv1s-aB20T?usp=sharing#scrollTo=lYeALk7_-rp2)
-   <br> ⚠️ Important: This link opens a temporary copy of the notebook. If you make any changes, be sure to save a copy to your own Google Drive.
+   <br> ⚠️ Important: This link opens a temporary copy of the notebook. If you make any changes, click "Copy to Drive" to save a copy. (Google sign-in required)
+        <br>
+        <img src="https://drive.google.com/uc?export=view&id=1PveMCo_hK503E4GlLlYVsApsLCmPo3Lj" alt="drawing" width="800"/>
 
 * Option 2: Run locally
   * Download `code.R` from the GitHub page
